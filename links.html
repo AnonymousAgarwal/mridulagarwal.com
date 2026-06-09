@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Links - Mridul Agarwal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+    <h1>Interesting links</h1>
+    <p>This page is locked. Enter the password to view it.</p>
+
+    <form id="unlock-form">
+        <label>
+            Password:
+            <br>
+            <input type="password" id="password" autocomplete="off" autofocus>
+        </label>
+        <button type="submit">Unlock</button>
+    </form>
+
+    <p id="error" style="color: #b00; display: none;">Wrong password.</p>
+
+    <div id="content" style="display: none;"></div>
+
+    <p><a href="index.html">Back to Home</a></p>
+
+    <script>
+        // Ciphertext only. The real links are never present in plaintext here.
+        // Regenerate with: node encrypt.mjs   (see encrypt.mjs)
+        const ENCRYPTED = {
+            "v": 1,
+            "iterations": 250000,
+            "salt": "W5lXZs387Bpr2VmYxlIPuA==",
+            "iv": "b467B3iRTgUacQ28",
+            "ct": "HbcbbqQ/d4quA1mIjNW4BbrAYrNLdmXarenDcS+Oyd94+AZtGOiS8EV3H8XOE0LkX/9gkwShD3eKr6pJBdxnwIYoaL+DMwrkOysTStXyvRCUCJVFn3jgkRLYE9oKGzUZkru6hFiZ0r6lSGMGTKmLrQM2"
+        };
+
+        const b64ToBytes = (s) =>
+            Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+        async function deriveKey(password, salt, iterations) {
+            const baseKey = await crypto.subtle.importKey(
+                'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+            );
+            return crypto.subtle.deriveKey(
+                { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+                baseKey,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['decrypt']
+            );
+        }
+
+        async function unlock(password) {
+            const key = await deriveKey(
+                password, b64ToBytes(ENCRYPTED.salt), ENCRYPTED.iterations
+            );
+            const plaintext = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: b64ToBytes(ENCRYPTED.iv) },
+                key,
+                b64ToBytes(ENCRYPTED.ct)
+            );
+            return new TextDecoder().decode(plaintext);
+        }
+
+        const form = document.getElementById('unlock-form');
+        const error = document.getElementById('error');
+        const content = document.getElementById('content');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            error.style.display = 'none';
+            const password = document.getElementById('password').value;
+            try {
+                const html = await unlock(password);
+                content.innerHTML = html;
+                content.style.display = 'block';
+                form.style.display = 'none';
+                document.querySelector('p').style.display = 'none';
+            } catch (err) {
+                // AES-GCM auth failure (wrong password) throws here.
+                error.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
